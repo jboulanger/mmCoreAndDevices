@@ -160,7 +160,7 @@ public:
    {	   
 #ifdef _WIN32
 	   //MyLogMessage("AsioClient::EnableDTR\n");
-	   HANDLE h = serialPortImplementation_.native();
+	   HANDLE h = serialPortImplementation_.native_handle();
 	   int ret = 0;
 	   if (dtr_enable) ret = EscapeCommFunction(h, SETDTR);
 	   else ret = EscapeCommFunction(h, CLRDTR);

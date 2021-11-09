@@ -500,7 +500,7 @@ int SerialPort::Initialize()
       // (boost::asio::detail::win_iocp_serial_port_service) initializes serial
       // ports (the bug results in a stackoverflow or an error).
       HANDLE portHandle;
-      int ret = OpenWin32SerialPort(portName_, portHandle);
+      ret = OpenWin32SerialPort(portName_, portHandle);
       if (ret != DEVICE_OK)
       {
          return ret;
