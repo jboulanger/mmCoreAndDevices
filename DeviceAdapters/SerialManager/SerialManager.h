@@ -3,9 +3,9 @@
 // PROJECT:       Micro-Manager
 // SUBSYSTEM:     DeviceAdapters
 //-----------------------------------------------------------------------------
-// DESCRIPTION:   serial port device adapter
-//
-// AUTHOR:
+// DESCRIPTION:   serial port device adapter 
+//                
+// AUTHOR:        
 //
 // COPYRIGHT:     University of California, San Francisco, 2006
 // LICENSE:       This file is distributed under the BSD license.
@@ -62,7 +62,7 @@ class AsioClient;
 #define ERR_TERM_TIMEOUT 107
 #define ERR_PURGE_FAILED 108
 #define ERR_PORT_CHANGE_FORBIDDEN 109
-#define ERR_PORT_BLOCKLISTED 110
+#define ERR_PORT_BLACKLISTED 110
 #define ERR_PORT_NOTINITIALIZED 111
 
 
@@ -70,17 +70,17 @@ class AsioClient;
 // Implementation of the MMDevice and MMStateDevice interfaces
 //
 
-class SerialPort : public CSerialBase<SerialPort>
+class SerialPort : public CSerialBase<SerialPort>  
 {
 public:
    SerialPort(const char* portName);
    ~SerialPort();
-
+  
    // MMDevice API
    // ------------
    int Initialize();
    int Shutdown();
-
+  
    void GetName(char* pszName) const;
    bool Busy() {return busy_;}
 
@@ -88,18 +88,18 @@ public:
    int GetAnswer(char* answer, unsigned bufLength, const char* term);
    int Write(const unsigned char* buf, unsigned long bufLen);
    int Read(unsigned char* buf, unsigned long bufLen, unsigned long& charsRead);
-   MM::PortType GetPortType() const {return MM::SerialPort;}
+   MM::PortType GetPortType() const {return MM::SerialPort;}    
    int Purge();
 
-   std::string Name() const;
+   std::string Name(void) const;
 
    // This overrides a protected nonvirtual function and makes it public.
-   void LogMessage(const char *const p, bool debugOnly = false)
+   void LogMessage(const char *const p, bool debugOnly = false) const
    {
       if (this->IsCallbackRegistered())
          CSerialBase<SerialPort>::LogMessage(std::string(p), debugOnly);
       else
-         std::cerr << p << std::endl;;
+         std::cerr << p << std::endl;
    }
 
 
@@ -108,10 +108,11 @@ public:
    int OnStopBits(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnParity(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnHandshaking(MM::PropertyBase* pProp, MM::ActionType eAct);
+   int OnDTR(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnBaud(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnDataBits(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnTimeout(MM::PropertyBase* pProp, MM::ActionType eAct);
    int OnDelayBetweenCharsMs(MM::PropertyBase* pProp, MM::ActionType eAct);
+
    int OnVerbose(MM::PropertyBase* pProp, MM::ActionType eAct);
 
    void AddReference() {refCount_++;}
@@ -119,7 +120,7 @@ public:
    bool OKToDelete() {return refCount_ < 1;}
 
 
-   bool Initialized() { return initialized_; }
+   bool Initialized(void) { return initialized_; }
 
 
 private:
@@ -128,7 +129,7 @@ private:
    bool initialized_;
    bool busy_;
 
-   // thread locking for the port
+   // thread locking for the port 
    MMThreadLock portLock_;
 
    double answerTimeoutMs_;
@@ -136,7 +137,6 @@ private:
    double transmitCharWaitMs_;
    std::map<std::string, int> baudList_;
 
-   unsigned dataBits_;
    std::string stopBits_;
    std::string parity_;
 
@@ -146,17 +146,16 @@ private:
    // the worker thread
    boost::thread* pThread_;
    bool verbose_; // if false, turn off LogBinaryMessage even in Debug Log
-
+   bool dtrEnable_; // currently only used on Windows
 
 #ifdef _WIN32
-   bool dtrEnable_; // currently only used on Windows
-   bool fastUSB2Serial_; // suyrrently only relevant on Windows
    int OpenWin32SerialPort(const std::string& portName, HANDLE& portHandle);
-   int OnDTR(MM::PropertyBase* pProp, MM::ActionType eAct);
-   int OnFastUSB2Serial(MM::PropertyBase* pProp, MM::ActionType eAct);
 #endif
    void LogAsciiCommunication(const char* prefix, bool isInput, const std::string& content);
    void LogBinaryCommunication(const char* prefix, bool isInput, const unsigned char* content, std::size_t length);
+
+   HANDLE portHandle_;
+   int ConfigureWin32SerialPort();
 };
 
 class SerialManager
@@ -174,8 +173,8 @@ private:
 
 class SerialPortLister
 {
-public:
-   // returns list of serial ports that can be opened
-   static void ListPorts(std::vector<std::string> &availablePorts);
-   static bool portAccessible(const char*  portName);
+   public:                                                                   
+      // returns list of serial ports that can be opened
+      static void ListPorts(std::vector<std::string> &availablePorts);
+      static bool portAccessible(const char*  portName);                     
 };

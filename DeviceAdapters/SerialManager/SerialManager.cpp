@@ -20,6 +20,8 @@
 // AUTHOR:        Nenad Amodaj - Mark I - use CSerial class
 //                Karl Hoover - Mark II - use boost, also simplify handling of terminators
 
+ #include "boost/date_time/local_time/local_time.hpp"
+
 #include "SerialManager.h"
 
 #include "AsioClient.h"
@@ -50,7 +52,7 @@
 
 SerialManager g_serialManager;
 
-std::vector<std::string> g_BlockListedPorts;
+std::vector<std::string> g_BlackListedPorts;
 std::vector<std::string> g_PortList;
 time_t g_PortListLastUpdated = 0;
 
@@ -76,8 +78,6 @@ const char* g_Baud_460800 = "460800";
 const char* g_Baud_500000 = "500000";
 const char* g_Baud_576000 = "576000";
 const char* g_Baud_921600 = "921600";
-const char* g_Baud_1000000 = "1000000";
-const char* g_Baud_2000000 = "2000000";
 
 const char* g_Handshaking_Off = "Off";
 const char* g_Handshaking_Hardware = "Hardware";
@@ -107,18 +107,19 @@ bool SerialPortLister::portAccessible(const char* portName)
    }
    catch( std::exception& )
    {
+      
       return false;
    }
 
-   return false;
+   return false;                                                             
 }
 
 
 #ifdef WIN32
 const int MaxBuf = 100000;
-typedef struct
-{
-   char buffer[MaxBuf];
+typedef struct 
+	{
+		char buffer[MaxBuf];
 } B100000;
 #endif
 
@@ -149,19 +150,19 @@ void SerialPortLister::ListPorts(std::vector<std::string> &availablePorts)
          if( 0 == jj->substr(0,3).compare("COM"))
             availablePorts.push_back(*jj);
       }
-
+      
    }
 #endif // WIN32
 
-#ifdef __linux__
-   // Look for /dev files with correct signature
+#ifdef linux 
+   // Look for /dev files with correct signature 
    DIR* pdir = opendir("/dev");
    struct dirent *pent;
    if (pdir) {
       while (pent = readdir(pdir)) {
-         if ( (strstr(pent->d_name, "ttyS") != 0) ||
-               (strstr(pent->d_name, "ttyUSB") != 0)  ||
-               (strstr(pent->d_name, "ttyACM") != 0))
+         if ( (strstr(pent->d_name, "ttyS") != 0) || 
+               (strstr(pent->d_name, "ttyUSB") != 0)  || 
+               (strstr(pent->d_name, "ttyACM") != 0))  
          {
             std::string p = ("/dev/");
             p.append(pent->d_name);
@@ -170,7 +171,7 @@ void SerialPortLister::ListPorts(std::vector<std::string> &availablePorts)
          }
       }
    }
-#endif // linux
+#endif // linux 
 
 #ifdef __APPLE__
    // port discovery code for Darwin/Mac OS X
@@ -178,78 +179,67 @@ void SerialPortLister::ListPorts(std::vector<std::string> &availablePorts)
    io_iterator_t   serialPortIterator;
    char            bsdPath[256];
    kern_return_t       kernResult;
-   CFMutableDictionaryRef classesToMatch;
-
-   // Serial devices are instances of class IOSerialBSDClient
-   classesToMatch = IOServiceMatching(kIOSerialBSDServiceValue);
-   if (classesToMatch == NULL)
-   {
+   CFMutableDictionaryRef classesToMatch; 
+                                                                                 
+   // Serial devices are instances of class IOSerialBSDClient          
+   classesToMatch = IOServiceMatching(kIOSerialBSDServiceValue); 
+   if (classesToMatch == NULL) {                                 
       std::cerr << "IOServiceMatching returned a NULL dictionary.\n";
-   }
-   else
-   {
-       CFDictionarySetValue(classesToMatch,
-                           CFSTR(kIOSerialBSDTypeKey),
-                           CFSTR(kIOSerialBSDAllTypes));
+   } else {
+       CFDictionarySetValue(classesToMatch,                         
+                           CFSTR(kIOSerialBSDTypeKey),        
+                           CFSTR(kIOSerialBSDAllTypes));   
    }
    kernResult = IOServiceGetMatchingServices(kIOMasterPortDefault, classesToMatch, &serialPortIterator);
-   if (KERN_SUCCESS != kernResult)
-   {
+   if (KERN_SUCCESS != kernResult) {
       std::cerr << "IOServiceGetMatchingServices returned " << kernResult << "\n";
    }
-
+                                                                        
    // Given an iterator across a set of modems, return the BSD path to the first one.
-   // If no modems are found the path name is set to an empty string.
+   // If no modems are found the path name is set to an empty string.            
    io_object_t      modemService;
-
-   // Initialize the returned path
-   *bsdPath = '\0';
-   // Iterate across all modems found.
-   while ( (modemService = IOIteratorNext(serialPortIterator)) )
-   {
-      CFTypeRef bsdPathAsCFString;
-      // Get the device's path (/dev/tty.xxxxx).
-      bsdPathAsCFString = IORegistryEntryCreateCFProperty(modemService,
-            CFSTR(kIODialinDeviceKey),
-            kCFAllocatorDefault,
-            0);
-      if (bsdPathAsCFString)
-      {
-         Boolean result;
-         // Convert the path from a CFString to a C (NUL-terminated) string for use
-         // with the POSIX open() call.
-         result = CFStringGetCString( (const __CFString*) bsdPathAsCFString,
-                                         bsdPath,
-                                         sizeof(bsdPath),
-                                         kCFStringEncodingUTF8);
+   
+   // Initialize the returned path                                              
+   *bsdPath = '\0';           
+   // Iterate across all modems found.                                          
+   while ( (modemService = IOIteratorNext(serialPortIterator)) ) {
+       CFTypeRef bsdPathAsCFString;
+       // Get the device's path (/dev/tty.xxxxx).
+       bsdPathAsCFString = IORegistryEntryCreateCFProperty(modemService,
+                               CFSTR(kIODialinDeviceKey),          
+                               kCFAllocatorDefault,  
+                               0);                   
+      if (bsdPathAsCFString) {
+         Boolean result;                                                        
+         // Convert the path from a CFString to a C (NUL-terminated) string for use           
+         // with the POSIX open() call. 
+         result = CFStringGetCString( (const __CFString*) bsdPathAsCFString, 
+                                         bsdPath,   
+                                         sizeof(bsdPath), 
+                                         kCFStringEncodingUTF8); 
 
          CFRelease(bsdPathAsCFString);
 
          // add the name to our vector<string> only when this is not a dialup port
          std::string rresult (bsdPath);
          std::string::size_type loc = rresult.find("DialupNetwork", 0);
-         if (result && (loc == std::string::npos))
-         {
-             bool blockListed = false;
-             std::vector<std::string>::iterator it = g_BlockListedPorts.begin();
-             while (it < g_BlockListedPorts.end())
-             {
-                if (bsdPath == (*it))
-                {
-                   blockListed = true;
-                }
+         if (result && (loc == std::string::npos)) {
+             bool blackListed = false;
+             std::vector<std::string>::iterator it = g_BlackListedPorts.begin();
+             while (it < g_BlackListedPorts.end()) {
+                if( bsdPath == (*it))
+                   blackListed = true;
             }
-            if (portAccessible(bsdPath) && ! blockListed)
-            {
-               availablePorts.push_back(bsdPath);
-            }
+            if (portAccessible(bsdPath) && ! blackListed)  {
+                 availablePorts.push_back(bsdPath);
+            }                 
             kernResult = KERN_SUCCESS;
          }
       }
-   }
+   } 
 
-   // Release the io_service_t now that we are done with it.
-   (void) IOObjectRelease(modemService);
+    // Release the io_service_t now that we are done with it.
+    (void) IOObjectRelease(modemService);
 
 #endif // __APPLE
 }
@@ -264,7 +254,7 @@ void SerialPortLister::ListPorts(std::vector<std::string> &availablePorts)
  * Caches this list in g_PortList and only queries hardware when this cache is absent or stale
  */
 MODULE_API void InitializeModuleData()
-{
+{  
    // Determine whether portList is fresh enough (i.e. younger than 15 seconds):
    time_t seconds = time(NULL);
    time_t timeout = 15;
@@ -272,13 +262,12 @@ MODULE_API void InitializeModuleData()
 
    if (g_PortList.size() == 0 || stale)
    {
-      SerialPortLister::ListPorts(g_PortList);
+      SerialPortLister::ListPorts(g_PortList); 
       g_PortListLastUpdated = time(NULL);
    }
 
    std::vector<std::string>::iterator it = g_PortList.begin();
-   while (it < g_PortList.end())
-   {
+   while (it < g_PortList.end()) {
       RegisterDevice((*it).c_str(), MM::SerialDevice, "Serial communication port");
       it++;
    }
@@ -305,9 +294,7 @@ SerialManager::~SerialManager()
 {
    std::vector<SerialPort*>::iterator i;
    for (i=ports_.begin(); i!=ports_.end(); i++)
-   {
       delete *i;
-   }
 }
 
 MM::Device* SerialManager::CreatePort(const char* portName)
@@ -331,6 +318,7 @@ MM::Device* SerialManager::CreatePort(const char* portName)
    ports_.push_back(pPort);
    pPort->AddReference();
    return pPort;
+
 }
 
 void SerialManager::DestroyPort(MM::Device* port)
@@ -350,7 +338,7 @@ void SerialManager::DestroyPort(MM::Device* port)
             delete *i;
             ports_.erase(i);
          }
-         return;
+         return;       
       }
    }
 }
@@ -361,20 +349,15 @@ SerialPort::SerialPort(const char* portName) :
    answerTimeoutMs_(500),
    refCount_(0),
    transmitCharWaitMs_(0.0),
-   dataBits_(8),
    stopBits_(g_StopBits_1),
    parity_(g_Parity_None),
    pService_(0),
    pPort_(0),
    pThread_(0),
-   verbose_(true)
-#ifdef WIN32
-   ,
-   dtrEnable_(false),
-   fastUSB2Serial_(false)
-#endif
+   verbose_(true),
+   dtrEnable_(false)
 {
-
+	   
    portName_ = portName;
 
    InitializeDefaultErrorMessages();
@@ -410,16 +393,10 @@ SerialPort::SerialPort(const char* portName) :
    AddAllowedValue(MM::g_Keyword_BaudRate, g_Baud_460800, (long)460800);
    AddAllowedValue(MM::g_Keyword_BaudRate, g_Baud_500000, (long)500000);
    AddAllowedValue(MM::g_Keyword_BaudRate, g_Baud_921600, (long)921600);
-   AddAllowedValue(MM::g_Keyword_BaudRate, g_Baud_1000000, (long)1000000);
-   AddAllowedValue(MM::g_Keyword_BaudRate, g_Baud_2000000, (long)2000000);
 
    // data bits
-   CPropertyAction* pActDataBits = new CPropertyAction(this, &SerialPort::OnDataBits);
-   ret = CreateIntegerProperty(MM::g_Keyword_DataBits, 8, false, pActDataBits, true);
+   ret = CreateProperty(MM::g_Keyword_DataBits, "8", MM::String, true);
    assert(ret == DEVICE_OK);
-
-   AddAllowedValue(MM::g_Keyword_DataBits, "7", 7);
-   AddAllowedValue(MM::g_Keyword_DataBits, "8", 8);
 
    // stop bits
    CPropertyAction* pActStopBits = new CPropertyAction (this, &SerialPort::OnStopBits);
@@ -447,21 +424,14 @@ SerialPort::SerialPort(const char* portName) :
    AddAllowedValue(MM::g_Keyword_Handshaking, g_Handshaking_Hardware, (long)boost::asio::serial_port_base::flow_control::hardware);
    AddAllowedValue(MM::g_Keyword_Handshaking, g_Handshaking_Software, (long)boost::asio::serial_port_base::flow_control::software);
 
-   // on Windows only, DTR Enable:
- #ifdef WIN32
-   CPropertyAction* pActDTREnable = new CPropertyAction(this, &SerialPort::OnDTR);
-   ret = CreateProperty("DTR", "Enable", MM::String, false, pActDTREnable, true);
-   assert (ret == DEVICE_OK);
-   AddAllowedValue("DTR", "Enable");
-   AddAllowedValue("DTR", "Disable");
-#endif
-
+// on Windows only, DTR Enable:
+// Since this does not make a difference for Sam Lord and Diskovery, comment out for now
 #ifdef WIN32
-   CPropertyAction* pActFastUSB2Serial = new CPropertyAction(this, &SerialPort::OnFastUSB2Serial);
-   ret = CreateProperty("Fast USB to Serial", "Enable", MM::String, false, pActFastUSB2Serial, true);
+   CPropertyAction* pActDTREnable = new CPropertyAction(this, &SerialPort::OnDTR);
+   ret = CreateProperty("DTR Control", "Enable", MM::String, false, pActDTREnable, true);
    assert (ret == DEVICE_OK);
-   AddAllowedValue("Fast USB to Serial", "Enable");
-   AddAllowedValue("Fast USB to Serial", "Disable");
+   AddAllowedValue("DTR Control", "Enable");
+   AddAllowedValue("DTR Control", "Disable");
 #endif
 
    // answer timeout
@@ -469,10 +439,10 @@ SerialPort::SerialPort(const char* portName) :
    ret = CreateProperty("AnswerTimeout", "500", MM::Float, false, pActTimeout, true);
    assert(ret == DEVICE_OK);
 
-   // transmission Delay
+   // transmission Delay                                                     
    CPropertyAction* pActTD = new CPropertyAction (this, &SerialPort::OnDelayBetweenCharsMs);
    ret = CreateProperty("DelayBetweenCharsMs", "0", MM::Float, false, pActTD, true);
-   assert(ret == DEVICE_OK);
+   assert(ret == DEVICE_OK);   
 
    // verbose debug messages
    pActTD = new CPropertyAction (this, &SerialPort::OnVerbose);
@@ -483,11 +453,10 @@ SerialPort::SerialPort(const char* portName) :
 
 SerialPort::~SerialPort()
 {
-   Shutdown();
-
+   Shutdown();   
    delete pPort_;
    delete pThread_;
-   delete pService_;
+   delete pService_;   
 }
 
 
@@ -496,14 +465,11 @@ int SerialPort::Initialize()
    if (initialized_)
       return DEVICE_OK;
 
-   // do not initialize if this port has been blocklisted
-   std::vector<std::string>::iterator it = g_BlockListedPorts.begin();
-   while (it < g_BlockListedPorts.end())
-   {
-      if (portName_ == (*it))
-      {
-         return ERR_PORT_BLOCKLISTED;
-      }
+   // do not initialize if this port has been blacklisted
+   std::vector<std::string>::iterator it = g_BlackListedPorts.begin();
+   while (it < g_BlackListedPorts.end()) {
+      if( portName_ == (*it))
+         return ERR_PORT_BLACKLISTED;
       it++;
    }
 
@@ -539,7 +505,7 @@ int SerialPort::Initialize()
       {
          return ret;
       }
-
+	  
       pPort_ = new AsioClient(*pService_,
             this->portName_,
             portHandle,
@@ -547,9 +513,10 @@ int SerialPort::Initialize()
             boost::asio::serial_port::flow_control::type(handshake),
             boost::asio::serial_port::parity::type(parity),
             boost::asio::serial_port::stop_bits::type(sb),
-            dataBits_,
             this);
-      
+
+	  portHandle_ = portHandle;
+	 
 #else
       pPort_ = new AsioClient(*pService_,
             boost::lexical_cast<unsigned int>(baud),
@@ -557,7 +524,6 @@ int SerialPort::Initialize()
             boost::asio::serial_port::flow_control::type(handshake),
             boost::asio::serial_port::parity::type(parity),
             boost::asio::serial_port::stop_bits::type(sb),
-            dataBits_,
             this);
 #endif
    }
@@ -573,7 +539,7 @@ int SerialPort::Initialize()
       pThread_ = new boost::thread(boost::bind(
                &boost::asio::io_service::run, pService_));
    }
-   catch (std::exception& what)
+   catch(std::exception& what)
    {
       SetErrorText(ERR_OPEN_FAILED, what.what());
       LogMessage(what.what(), false);
@@ -624,13 +590,18 @@ int SerialPort::OpenWin32SerialPort(const std::string& portName,
    dcb.fDsrSensitivity = FALSE;
    dcb.fNull = FALSE;
    dcb.fAbortOnError = FALSE;
-   if (dtrEnable_)
-   {
-      dcb.fDtrControl = DTR_CONTROL_ENABLE;
-   } else 
-   {
-      dcb.fDtrControl = DTR_CONTROL_DISABLE;
-   }
+   // Since this does not make a difference for Sam Lord and Diskovery, comment out for now
+   //if (dtrEnable_)
+   //   dcb.fDtrControl = DTR_CONTROL_ENABLE;
+   //else
+   //   dcb.fDtrControl = DTR_CONTROL_DISABLE;
+   
+   LogMessage("SerialPort::OpenWin32SerialPort : DTR disable\n");
+   dcb.fAbortOnError = TRUE;
+   dcb.fDtrControl = DTR_CONTROL_DISABLE;
+   dcb.fRtsControl = RTS_CONTROL_DISABLE;
+
+
    // The following lines work around crashes caused by invalid or incorrect
    // values returned by some serial port drivers (some versions of Silicon
    // Labs USB-serial drivers).
@@ -643,7 +614,7 @@ int SerialPort::OpenWin32SerialPort(const std::string& portName,
       dcb.XoffLim = 512;
    }
    dcb.ByteSize = 8;
-   dcb.BaudRate = CBR_9600;
+   dcb.BaudRate = CBR_19200;
    // End of workaround settings.
 
    if (!SetCommState(portHandle, &dcb))
@@ -658,18 +629,7 @@ int SerialPort::OpenWin32SerialPort(const std::string& portName,
 
    COMMTIMEOUTS timeouts;
    memset(&timeouts, 0, sizeof(timeouts));
-   if (fastUSB2Serial_) 
-   {
-      timeouts.ReadIntervalTimeout = MAXDWORD;
-      timeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
-      timeouts.WriteTotalTimeoutConstant = 1;
-      LogMessage("Setting fast USB to Serial settings");
-   } 
-   else
-   {
-      timeouts.ReadIntervalTimeout = 1;
-      LogMessage("Setting standard USB to Serial settings");
-   }
+   timeouts.ReadIntervalTimeout = 1;
    if (!SetCommTimeouts(portHandle, &timeouts))
    {
       DWORD err = GetLastError();
@@ -698,40 +658,24 @@ int SerialPort::Shutdown()
 
    if( 0 != pThread_)
    {
-      // Theoretically we shouldn't need to sleep here, but skipping this
-      // exacerbates the gh-1254 problem described below. 40 ms was sufficient
-      // in testing; 30 ms was only partially effective; using 80 ms to be safe.
-      CDeviceUtils::SleepMs(80);
-
-      // Joining the async thread ensures that all asio resources are closed.
+      CDeviceUtils::SleepMs(100);
       if (!pThread_->timed_join(boost::posix_time::millisec(1000) )) {
          LogMessage("Failed to cleanly close port (thread join timed out)");
          pThread_->detach();
-         g_BlockListedPorts.push_back(portName_);
-      }
-      else {
-         // We successfully joined, meaning that all asio resources have been
-         // closed. But immediately reopening the port can cause sporadic
-         // failures under some conditions (Windows, FTDI USB-serial).
-         // See issue gh-1254.
-         // In my testing, a 40 ms sleep slightly decreased the chance of
-         // failure, and 50 ms eliminated it. Using 100 ms to add a safety
-         // margin. (If the sleep before the join is skipped, even 100 ms here
-         // was not enough to eliminate failure.)
-         CDeviceUtils::SleepMs(100);
+         g_BlackListedPorts.push_back(portName_);
       }
    }
    initialized_ = false;
-
+ 
    return DEVICE_OK;
 }
-
+  
 void SerialPort::GetName(char* pszName) const
 {
    CDeviceUtils::CopyLimitedString(pszName, portName_.c_str());
 }
 
-std::string SerialPort::Name() const
+std::string SerialPort::Name(void) const
 {
    char value[MM::MaxStrLength];
    value[0] = 0;
@@ -744,14 +688,15 @@ int SerialPort::SetCommand(const char* command, const char* term)
    if (!initialized_)
       return ERR_PORT_NOTINITIALIZED;
 
-   std::string sendText(command);
-   if (term != 0)
-   {
-      sendText += term;
-   }
+   if (dtrEnable_) pPort_->EnableDTR(true);
+   else pPort_->EnableDTR(false);
 
-   if (sendText.size() == 0)
-   {
+   std::string sendText(command);
+      
+   if (term != 0)
+      sendText += term;
+
+   if (sendText.size() == 0) {
       return DEVICE_OK;
    }
 
@@ -793,8 +738,8 @@ int SerialPort::GetAnswer(char* answer, unsigned bufLen, const char* term)
    MM::MMTime nonTerminatedAnswerTimeout(5.0 * 1000.0); // For bug-compatibility
    while ((GetCurrentMMTime() - startTime)  < answerTimeout)
    {
-      bool anyRead =  pPort_->ReadOneCharacter(theData);
-      if (anyRead)
+      bool anyRead =  pPort_->ReadOneCharacter(theData);        
+      if( anyRead )
       {
          if (bufLen <= answerOffset)
          {
@@ -854,8 +799,7 @@ int SerialPort::Write(const unsigned char* buf, unsigned long bufLen)
    if (!initialized_)
       return ERR_PORT_NOTINITIALIZED;
 
-   if (bufLen == 0)
-   {
+   if (bufLen == 0) {
       return DEVICE_OK;
    }
 
@@ -873,34 +817,32 @@ int SerialPort::Write(const unsigned char* buf, unsigned long bufLen)
    }
 
    if (verbose_)
-   {
       LogBinaryCommunication("Write", false, buf, bufLen);
-   }
 
    return DEVICE_OK;
 }
-
+ 
 int SerialPort::Read(unsigned char* buf, unsigned long bufLen, unsigned long& charsRead)
 {
    if (!initialized_)
       return ERR_PORT_NOTINITIALIZED;
 
    int r = DEVICE_OK;
-   if (0 < bufLen)
+   if( 0 < bufLen)
    {
       // zero the buffer
       memset(buf, 0, bufLen);
       charsRead = 0;
-
+      
       bool anyRead = false;
       char theData = 0;
-      for (;;)
+      for( ;; )
       {
-         anyRead = pPort_->ReadOneCharacter(theData);
-         if (anyRead)
+         anyRead = pPort_->ReadOneCharacter(theData); 
+         if( anyRead)
          {
             buf[charsRead] = (unsigned char)theData;
-            if (bufLen <= ++charsRead)
+            if( bufLen <= ++charsRead)
             {
                // buffer is full
                break;
@@ -912,18 +854,14 @@ int SerialPort::Read(unsigned char* buf, unsigned long bufLen, unsigned long& ch
             break;
          }
       }
-      if (0 < charsRead)
+      if( 0 < charsRead)
       {
-         if (verbose_)
-         {
+         if(verbose_)
             LogBinaryCommunication("Read", true, buf, charsRead);
-         }
       }
    }
    else
-   {
       r = ERR_BUFFER_OVERRUN;
-   }
 
    return r;
 }
@@ -940,29 +878,6 @@ int SerialPort::Purge()
 //////////////////////////////////////////////////////////////////////////////
 // Action interface
 //
-int SerialPort::OnDataBits(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
-   if (eAct == MM::BeforeGet)
-   {
-      pProp->Set(long(dataBits_));
-   }
-   else if (eAct == MM::AfterSet)
-   {
-      long dataBits;
-      int ret = GetCurrentPropertyData(MM::g_Keyword_DataBits, dataBits);
-      if (ret != DEVICE_OK)
-         return ret;
-      if (initialized_)
-      {
-         pPort_->ChangeDataBits(unsigned(dataBits));
-      }
-      dataBits_ = dataBits;
-   }
-
-   return DEVICE_OK;
-}
-
-
 int SerialPort::OnStopBits(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
    if (eAct == MM::BeforeGet)
@@ -1053,10 +968,41 @@ int SerialPort::OnHandshaking(MM::PropertyBase* /*pProp*/, MM::ActionType eAct)
          ret = GetCurrentPropertyData(MM::g_Keyword_Handshaking, handshake);
          if (ret != DEVICE_OK)
             return ret;
-         pPort_->ChangeFlowControl(boost::asio::serial_port_base::flow_control::type(handshake));
+			//pPort_->ChangeFlowControl(boost::asio::serial_port_base::flow_control::type(handshake));
       }
+	  LogMessage("SerialPort::OnHandshaking skipped\n");
    }
 
+   return DEVICE_OK;
+}
+
+int SerialPort::OnDTR(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+	
+   if (eAct == MM::BeforeGet)
+   {	  
+      if (dtrEnable_)
+         pProp->Set("Enable");
+      else
+         pProp->Set("Disable");
+   }
+   else if (eAct == MM::AfterSet)
+   {	   
+      std::string answer;
+      pProp->Get(answer);
+      if (answer == "Enable") 
+	  {
+         dtrEnable_ = true;
+		 //pPort_->EnableDTR(true);
+	  } 
+	  else 
+	  {
+         dtrEnable_ = false;	
+		 //pPort_->EnableDTR(false);
+	  }
+	  if (dtrEnable_) LogMessage("SerialPort::OnDTR DTR enable\n");
+	  else LogMessage(" SerialPort::OnDTR DTR disable\n");	  
+  }   
    return DEVICE_OK;
 }
 
@@ -1079,93 +1025,37 @@ int SerialPort::OnVerbose(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
 
    if (eAct == MM::BeforeGet)
-   {
-      pProp->Set(verbose_ ? 1L : 0L);
+   {  
+      pProp->Set(verbose_?1L:0L);
    }
    else if (eAct == MM::AfterSet)
-   {
+   {  
       long value;
       pProp->Get(value);
       verbose_ = !!value;
-   }
+   }     
 
    return DEVICE_OK;
+
 }
 
 
 int SerialPort::OnDelayBetweenCharsMs(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
+{  
    if (eAct == MM::BeforeGet)
-   {
+   {  
       pProp->Set(transmitCharWaitMs_);
    }
    else if (eAct == MM::AfterSet)
-   {
+   {  
       double transmitCharWaitMs;
       pProp->Get(transmitCharWaitMs);
       if (transmitCharWaitMs >= 0.0 && transmitCharWaitMs < 250.0)
          transmitCharWaitMs_ = transmitCharWaitMs;
-   }
+   }     
 
    return DEVICE_OK;
 }
-
-
-#ifdef WIN32
-
-int SerialPort::OnDTR(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
-   if (eAct == MM::BeforeGet)
-   {
-      if (dtrEnable_)
-         pProp->Set("Enable");
-      else
-         pProp->Set("Disable");
-   }
-   else if (eAct == MM::AfterSet)
-   {
-      std::string answer;
-      pProp->Get(answer);
-      if (answer == "Enable")
-      {
-         dtrEnable_ = true;
-      }
-      else {
-         dtrEnable_ = false;
-      }
-      if (initialized_) 
-      {
-         pPort_->ChangeDTR(dtrEnable_);   
-      }
-   }
-
-   return DEVICE_OK;
-}
-
-
-int SerialPort::OnFastUSB2Serial(MM::PropertyBase* pProp, MM::ActionType eAct)
-{
-   if (eAct == MM::BeforeGet)
-   {
-      if (fastUSB2Serial_)
-         pProp->Set("Enable");
-      else
-         pProp->Set("Disable");
-   }
-   else if (eAct == MM::AfterSet)
-   {
-      std::string answer;
-      pProp->Get(answer);
-      if (answer == "Enable")
-         fastUSB2Serial_ = true;
-      else
-         fastUSB2Serial_ = false;
-   }
-
-   return DEVICE_OK;
-}
-
-#endif
 
 
 // Helper functions for message logging
@@ -1175,12 +1065,8 @@ int SerialPort::OnFastUSB2Serial(MM::PropertyBase* pProp, MM::ActionType eAct)
 static bool ShouldEscape(char ch)
 {
    if (ch >= 0 && std::isgraph(ch))
-   {
       if (std::string("\'\"\\").find(ch) == std::string::npos)
-      {
          return false;
-      }
-   }
    return true;
 }
 
@@ -1262,9 +1148,7 @@ static void FormatBinaryContent(std::ostream& strm, const unsigned char* begin, 
    for (const unsigned char* p = begin; p != end; ++p)
    {
       if (p != begin)
-      {
          strm << ' ';
-      }
       strm << boost::format("%02x") % static_cast<unsigned int>(*p);
    }
 }
@@ -1290,4 +1174,74 @@ void SerialPort::LogBinaryCommunication(const char* prefix, bool isInput, const 
    oss << "(hex) ";
    FormatBinaryContent(oss, pdata, pdata + length);
    LogMessage(oss.str().c_str(), true);
+}
+
+int SerialPort::ConfigureWin32SerialPort()
+{		
+	DCB dcb;
+	memset(&dcb, 0, sizeof(DCB));
+	dcb.DCBlength = sizeof(DCB);
+	if (!GetCommState(portHandle_, &dcb))
+	{
+		DWORD err = GetLastError();
+		LogMessage(("Failed to read serial port parameters: "
+			"GetCommState() returned Windows system error code " +
+			boost::lexical_cast<std::string>(err)).c_str());
+		CloseHandle(portHandle_);
+		return DEVICE_ERR;
+	}
+
+	dcb.fBinary = TRUE;
+	dcb.fDsrSensitivity = FALSE;
+	dcb.fNull = FALSE;
+	dcb.fAbortOnError = FALSE;
+	// Since this does not make a difference for Sam Lord and Diskovery, comment out for now
+	if (dtrEnable_)
+		dcb.fDtrControl = DTR_CONTROL_ENABLE;
+	else
+		dcb.fDtrControl = DTR_CONTROL_DISABLE;
+
+	dcb.fDtrControl = DTR_CONTROL_DISABLE;
+	dcb.fRtsControl = RTS_CONTROL_DISABLE;
+
+	// The following lines work around crashes caused by invalid or incorrect
+	// values returned by some serial port drivers (some versions of Silicon
+	// Labs USB-serial drivers).
+	if (dcb.XonLim > 4096)
+	{
+		dcb.XonLim = 2048;
+	}
+	if (dcb.XoffLim > 4096)
+	{
+		dcb.XoffLim = 512;
+	}
+
+	//dcb.ByteSize = 8;
+	//dcb.BaudRate = CBR_9600;
+	// End of workaround settings.
+
+	if (!SetCommState(portHandle_, &dcb))
+	{
+		DWORD err = GetLastError();
+		LogMessage(("Failed to set serial port parameters: "
+			"SetCommState() returned Windows system error code " +
+			boost::lexical_cast<std::string>(err)).c_str());
+		CloseHandle(portHandle_);
+		return DEVICE_ERR;
+	}
+
+	COMMTIMEOUTS timeouts;
+	memset(&timeouts, 0, sizeof(timeouts));
+	timeouts.ReadIntervalTimeout = 1;
+	if (!SetCommTimeouts(portHandle_, &timeouts))
+	{
+		DWORD err = GetLastError();
+		LogMessage(("Failed to set serial port parameters: "
+			"SetCommTimeouts() returned Windows system error code " +
+			boost::lexical_cast<std::string>(err)).c_str());
+		CloseHandle(portHandle_);
+		return DEVICE_ERR;
+	}
+
+	return DEVICE_OK;
 }
