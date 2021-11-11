@@ -271,7 +271,6 @@ int OpenStageHub::set(const std::string &keyword, const long x, const long y, co
 	if (ret != DEVICE_OK){
 		return traceback(__FUNCTION__, "failed setting new values", ret);
 	}
-	Sleep(500);
 	std::string answer;
 	ret = rx(answer,"$");
 	logMessage("OpenStage::receiving answer");
