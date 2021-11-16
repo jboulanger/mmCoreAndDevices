@@ -508,6 +508,7 @@ void SpinnakerCamera::GetName(char* name) const
 
 int SpinnakerCamera::SnapImage()
 {
+   this->GetCoreCallback()->LogMessage(this, "[SPIN] snap image", true);
    MMThreadGuard g(m_pixelLock);
    try
    {
@@ -526,7 +527,7 @@ int SpinnakerCamera::SnapImage()
       SetErrorText(SPKR_ERROR, ex.what());
       return SPKR_ERROR;
    }
-
+   this->GetCoreCallback()->LogMessage(this, "[SPIN] snap image done", true);
    return DEVICE_OK;
 }
 
@@ -1578,7 +1579,7 @@ bool SpinnakerCamera::IsCapturing()
 
 int SpinnakerCamera::MoveImageToCircularBuffer()
 {
-   this->GetCoreCallback()->LogMessage(this, "spin entering fnct [move image to circ. buff]", false);
+   this->GetCoreCallback()->LogMessage(this, "[SPIN] entering fnct [move image to circ. buff]", false);
 
    if (!IsCapturing())
    {
@@ -1588,7 +1589,7 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
 
    try
    {
-       this->GetCoreCallback()->LogMessage(this, "spin send soft trigger to camera",false);
+       this->GetCoreCallback()->LogMessage(this, "[SPIN] send soft trigger to camera",false);
 
        if (m_cam->TriggerMode.GetValue() == SPKR::TriggerMode_On &&
          m_cam->TriggerSource.GetValue() == SPKR::TriggerSource_Software)
@@ -1596,14 +1597,14 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          m_cam->TriggerSoftware.Execute();
       }
 
-      this->GetCoreCallback()->LogMessage(this, "spin wait for next img",false);
+      this->GetCoreCallback()->LogMessage(this, "[SPIN] wait for next img",false);
       SPKR::ImagePtr ip =
          m_cam->GetNextImage((int)this->GetExposure() + 1000);
 
       
       if (!ip->IsIncomplete())
       {
-          this->GetCoreCallback()->LogMessage(this, "spin set metadata",false);
+          this->GetCoreCallback()->LogMessage(this, "[SPIN] set metadata",false);
           MM::MMTime timeStamp = this->GetCurrentMMTime();
          char label[MM::MaxStrLength];
          this->GetLabel(label);
@@ -1619,7 +1620,7 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          GetProperty(MM::g_Keyword_Binning, buf);
          md.put(MM::g_Keyword_Binning, buf);
 
-         this->GetCoreCallback()->LogMessage(this, "spin cpy data",false);
+         this->GetCoreCallback()->LogMessage(this, "[SPIN] cpy data",false);
 
          MMThreadGuard g(m_pixelLock);
 
@@ -1656,11 +1657,11 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          unsigned int w = GetImageWidth();
          unsigned int h = GetImageHeight();
          unsigned int b = GetImageBytesPerPixel();
-         this->GetCoreCallback()->LogMessage(this, "spin insert image", false);
+         this->GetCoreCallback()->LogMessage(this, "[SPIN] insert image", false);
          int ret = GetCoreCallback()->InsertImage(this, imageData, w, h, b, &md, true);
          if (!m_stopOnOverflow && ret == DEVICE_BUFFER_OVERFLOW)
          {
-             this->GetCoreCallback()->LogMessage(this, "spin overflow",false);
+             this->GetCoreCallback()->LogMessage(this, "[SPIN] overflow",false);
             // do not stop on overflow - just reset the buffer
             GetCoreCallback()->ClearImageBuffer(this);
             // don't process this same image again...
@@ -1668,13 +1669,13 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          }
          else
          {
-             this->GetCoreCallback()->LogMessage(this, "spin release data on cam", false);
+             this->GetCoreCallback()->LogMessage(this, "[SPIN] release data on cam", false);
             if (ip != NULL)
                ip->Release();
 
             return ret;
          }
-         this->GetCoreCallback()->LogMessage(this, "spin leaving fnct [mv img 2 circ buf]",false);
+         this->GetCoreCallback()->LogMessage(this, "[SPIN] leaving fnct [mv img 2 circ buf]",false);
       }
       else
       {
