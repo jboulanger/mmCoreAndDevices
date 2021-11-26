@@ -5,6 +5,8 @@
 #include "ImgBuffer.h"
 #include "DeviceThreads.h"
 #include "Spinnaker.h"
+#include <sstream>
+#include <string>
 
 #define SPKR Spinnaker
 #define GENAPI Spinnaker::GenApi
@@ -91,6 +93,9 @@ public:
    /*int OnLineMode(MM::PropertyBase* pProp, MM::ActionType eAct, long lineNum);
    int OnLineInverter(MM::PropertyBase* pProp, MM::ActionType eAct, long lineNum);
    int OnLineSource(MM::PropertyBase* pProp, MM::ActionType eAct, long lineNum);*/
+
+   int PrintDeviceInfo(SPKR::CameraPtr);
+   int SpinnakerCamera::Log(const std::stringstream & msg) const;
 
 private:
    int allocateImageBuffer(const std::size_t size, const SPKR::PixelFormatEnums buffer_type);

@@ -1,13 +1,13 @@
 #pragma warning(push)
 #pragma warning(disable : 4482)
 #pragma warning(disable : 4251) // Note: need to have a C++ interface, i.e., compiler versions need to match!
-
+#include "SpinGenApi/SpinnakerGenApi.h"
 #include "SpinnakerCamera.h"
 #include "ModuleInterface.h"
 #include <vector>
 #include <string>
 #include <algorithm>
-
+#include <sstream>
 
 std::wstring StringToWString(const std::string& str)
 {
@@ -95,11 +95,12 @@ std::vector<CamNameAndSN> GetSpinnakeerCameraNamesAndSNs()
 
 MODULE_API void InitializeModuleData()
 {
+
    try
    {
       std::vector<CamNameAndSN> camInfos =
          GetSpinnakeerCameraNamesAndSNs();
-
+        
       for (unsigned int i = 0; i < camInfos.size(); i++)
          RegisterDevice(camInfos[i].name.c_str(),
             MM::CameraDevice,
@@ -130,13 +131,13 @@ SpinnakerCamera::SpinnakerCamera(GENICAM::gcstring name)
    m_aqThread(NULL)
 {
    InitializeDefaultErrorMessages();
-
-   
+   LogMessage(" constructor");
    try
    {
+       
       std::vector<CamNameAndSN> camInfos =
          GetSpinnakeerCameraNamesAndSNs();
-
+      
       std::string serialNumber = "";
       if (camInfos.size() > 0)
       {
@@ -152,7 +153,7 @@ SpinnakerCamera::SpinnakerCamera(GENICAM::gcstring name)
    {
       LogMessage(ex.what());
    }
-
+   LogMessage(" create a acquisition thread");
    m_aqThread = new SpinnakerAcquisitionThread(this);
 }
 
@@ -165,8 +166,17 @@ SpinnakerCamera::~SpinnakerCamera()
    Shutdown();
 }
 
+
+int SpinnakerCamera::Log(const std::stringstream & msg) const {
+    const char* buf = msg.str().c_str();
+    return LogMessage(buf);
+}
+
 int SpinnakerCamera::Initialize()
 {
+   LogMessage("Initialize", false);
+
+   // get the serial number from the device property
    char SN[MM::MaxStrLength];
    GetProperty("Serial Number", SN);
    m_SN = GENICAM::gcstring(SN);
@@ -176,72 +186,59 @@ int SpinnakerCamera::Initialize()
       SetErrorText(SPKR_ERROR, "No Serial Number Provided! Cannot Identify Camera!");
       return SPKR_ERROR;
    }
-
+   
+   LogMessage(" find the cameras by serial number");
    m_system = SPKR::System::GetInstance();
    if (m_system == NULL)
    {
       SetErrorText(SPKR_ERROR, "Spinnaker System Object Pointer is Null!");
       return SPKR_ERROR;
    }
-
+   
    auto camList = m_system->GetCameras();
-
-   if (camList.GetSize() == 0)
-   {
-      SetErrorText(SPKR_ERROR, "No Cameras Attached!");
-      return SPKR_ERROR;
-   }
-
-   for (unsigned int i = 0; i < camList.GetSize(); i++)
-   {
-      auto &nm = camList.GetByIndex(i)
-         ->GetTLDeviceNodeMap();
-
-
-      GENAPI::CValuePtr SNNode = nm.GetNode("DeviceSerialNumber");
-
-      if (isNodeAvailable<NAM_READ>(SNNode))
-      {
-         if (SNNode->ToString() == m_SN)
-         {
-            m_cam = camList.GetByIndex(i);
-
-            GENAPI::CValuePtr modelNode = nm.GetNode("DeviceModelName");
-
-            m_cam->Init();
-            break;
-         }
-      }
+   m_cam = camList.GetBySerial(m_SN.c_str());
+   if (m_cam == NULL) {
+       SetErrorText(SPKR_ERROR, "Camera with matching serial number not found");
+       return SPKR_ERROR;
    }
    camList.Clear();
 
-   if (m_cam == NULL)
-   {
-      this->Shutdown();
-      SetErrorText(SPKR_ERROR, "Could not find camera with serial number: " + m_SN);
-      return SPKR_ERROR;
+   m_cam->Init();
+   if (!m_cam->IsInitialized()) {
+       this->Shutdown();
+       LogMessage(" Camera is not initialized");
+       SetErrorText(SPKR_ERROR, "Could not initialize camera with serial number: " + m_SN);
    }
 
+   LogMessage(" set trigger mode");
 
-
-   SPKR::TriggerModeEnums originalTriggerMode;
+   SPKR::TriggerModeEnums originalTriggerMode = SPKR::TriggerModeEnums::TriggerMode_Off;
    try
    {
-      originalTriggerMode = m_cam->TriggerMode.GetValue();
+      
+      // need to disable trigger mode to modify it
+      if (!GENAPI::IsWritable(m_cam->TriggerMode) || !GENAPI::IsReadable(m_cam->TriggerMode)) {
+          LogMessage("Could not disable triggering for R/W access");
+      }
+      else 
+      {
+          originalTriggerMode = m_cam->TriggerMode.GetValue();
+          m_cam->TriggerMode.SetValue(SPKR::TriggerMode_Off);
+      }
+      
       m_cam->ExposureAuto.SetValue(SPKR::ExposureAuto_Off);
       m_cam->ExposureMode.SetValue(SPKR::ExposureMode_Timed);
       m_cam->AcquisitionMode.SetValue(SPKR::AcquisitionMode_SingleFrame);
-      m_cam->TriggerMode.SetValue(SPKR::TriggerMode_Off);
    }
    catch (SPKR::Exception &ex)
    {
-      SetErrorText(SPKR_ERROR, ex.what());
-      return SPKR_ERROR;
+      LogMessage(ex.what());
    }
-
+   
+   LogMessage("Set exposure mode property");
    CPropertyAction* pAct;
    GENAPI::INodeMap &nm = m_cam->GetNodeMap();
-
+   
    try
    {
       GENAPI::CEnumerationPtr AFRA_enumeration = nm.GetNode("AcquisitionFrameRateAuto");
@@ -272,7 +269,6 @@ int SpinnakerCamera::Initialize()
          AddAllowedValue("Frame Rate Control Enabled", "1");
          AddAllowedValue("Frame Rate Control Enabled", "0");
          //CreatePropertyFromBool("Frame Rate Control Enabled", m_cam->AcquisitionFrameRateEnable, &SpinnakerCamera::OnFrameRateEnabled);
-
       }
       else
       {
@@ -351,34 +347,13 @@ int SpinnakerCamera::Initialize()
          pAct = new CPropertyAction(this, &SpinnakerCamera::OnBinningInt);
          CreateProperty(MM::g_Keyword_Binning, "1", MM::String, false, pAct);
 
-#ifdef max 
-#define SPKR_MAX
-#undef max
-#endif
-#ifdef min 
-#define SPKR_MIN
-#undef min
-#endif
-         auto max = std::min(BH->GetMax(), BV->GetMax());
-         auto min = std::max(BH->GetMin(), BV->GetMin());
-
-         for (int64_t i = min; i <= max; i++)
+         int64_t lower = 0, upper = 3648;
+         for (int64_t i = lower; i <= upper; i++)
          {
             std::stringstream ss;
             ss << i;
             AddAllowedValue(MM::g_Keyword_Binning, ss.str().c_str());
          }
-
-#ifdef SPKR_MAX
-#define max(a,b)            (((a) > (b)) ? (a) : (b))
-#undef SPKR_MAX
-#endif
-
-#ifdef SPKR_MIN
-#define min(a,b)            (((a) < (b)) ? (a) : (b))
-#undef SPKR_MIN
-#endif
-
       }
       else
       {
@@ -408,8 +383,7 @@ int SpinnakerCamera::Initialize()
    }
    catch (SPKR::Exception &ex)
    {
-      SetErrorText(SPKR_ERROR, ex.what());
-      return SPKR_ERROR;
+       LogMessage("Cound not set trigger mode on");
    }
 
 
@@ -422,7 +396,6 @@ int SpinnakerCamera::Initialize()
    CreatePropertyFromEnum("Exposure Mode", m_cam->ExposureMode, &SpinnakerCamera::OnExposureMode);
    CreatePropertyFromEnum("User Output Selector", m_cam->UserOutputSelector, &SpinnakerCamera::OnUserOutputSelector);
    CreatePropertyFromBool("User Output Value", m_cam->UserOutputValue, &SpinnakerCamera::OnUserOutputValue);
-
    CreatePropertyFromEnum("Line Selector", m_cam->LineSelector, &SpinnakerCamera::OnLineSelector);
    CreatePropertyFromEnum("Line Mode", m_cam->LineMode, &SpinnakerCamera::OnLineMode);
    CreatePropertyFromBool("Line Inverter", m_cam->LineInverter, &SpinnakerCamera::OnLineInverter);
@@ -470,9 +443,9 @@ int SpinnakerCamera::Initialize()
       m_cam->TriggerMode.SetValue(originalTriggerMode);
    }
    catch (SPKR::Exception &ex)
+
    {
-      SetErrorText(SPKR_ERROR, ex.what());
-      return SPKR_ERROR;
+      LogMessage(ex.what());
    }
 
    this->ClearROI();
@@ -508,26 +481,27 @@ void SpinnakerCamera::GetName(char* name) const
 
 int SpinnakerCamera::SnapImage()
 {
-   this->GetCoreCallback()->LogMessage(this, "[SPIN] snap image", true);
+   LogMessage("Snap image");
    MMThreadGuard g(m_pixelLock);
    try
    {
       m_cam->BeginAcquisition();
-
+      /*
       if (m_cam->TriggerMode.GetValue() == SPKR::TriggerMode_On &&
          m_cam->TriggerSource.GetValue() == SPKR::TriggerSource_Software)
       {
          m_cam->TriggerSoftware.Execute();
       }
-
+      */
       m_imagePtr = m_cam->GetNextImage((int)this->GetExposure() + 1000);
+      
    }
    catch (SPKR::Exception &ex)
    {
       SetErrorText(SPKR_ERROR, ex.what());
       return SPKR_ERROR;
    }
-   this->GetCoreCallback()->LogMessage(this, "[SPIN] snap image done", true);
+   LogMessage("snap image done");
    return DEVICE_OK;
 }
 
@@ -879,6 +853,7 @@ void SpinnakerCamera::RGBtoBGRA(uint8_t* data, size_t imageBuffLength)
 
 const unsigned char* SpinnakerCamera::GetImageBuffer()
 {
+
    MMThreadGuard g(m_pixelLock);
    try
    {
@@ -1579,7 +1554,7 @@ bool SpinnakerCamera::IsCapturing()
 
 int SpinnakerCamera::MoveImageToCircularBuffer()
 {
-   this->GetCoreCallback()->LogMessage(this, "[SPIN] entering fnct [move image to circ. buff]", false);
+   this->GetCoreCallback()->LogMessage(this, " entering fnct [move image to circ. buff]", false);
 
    if (!IsCapturing())
    {
@@ -1589,7 +1564,7 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
 
    try
    {
-       this->GetCoreCallback()->LogMessage(this, "[SPIN] send soft trigger to camera",false);
+       this->GetCoreCallback()->LogMessage(this, " send soft trigger to camera",false);
 
        if (m_cam->TriggerMode.GetValue() == SPKR::TriggerMode_On &&
          m_cam->TriggerSource.GetValue() == SPKR::TriggerSource_Software)
@@ -1597,14 +1572,14 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          m_cam->TriggerSoftware.Execute();
       }
 
-      this->GetCoreCallback()->LogMessage(this, "[SPIN] wait for next img",false);
+      this->GetCoreCallback()->LogMessage(this, " wait for next img",false);
       SPKR::ImagePtr ip =
          m_cam->GetNextImage((int)this->GetExposure() + 1000);
 
       
       if (!ip->IsIncomplete())
       {
-          this->GetCoreCallback()->LogMessage(this, "[SPIN] set metadata",false);
+          this->GetCoreCallback()->LogMessage(this, " set metadata",false);
           MM::MMTime timeStamp = this->GetCurrentMMTime();
          char label[MM::MaxStrLength];
          this->GetLabel(label);
@@ -1620,7 +1595,7 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          GetProperty(MM::g_Keyword_Binning, buf);
          md.put(MM::g_Keyword_Binning, buf);
 
-         this->GetCoreCallback()->LogMessage(this, "[SPIN] cpy data",false);
+         this->GetCoreCallback()->LogMessage(this, " cpy data",false);
 
          MMThreadGuard g(m_pixelLock);
 
@@ -1657,11 +1632,11 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          unsigned int w = GetImageWidth();
          unsigned int h = GetImageHeight();
          unsigned int b = GetImageBytesPerPixel();
-         this->GetCoreCallback()->LogMessage(this, "[SPIN] insert image", false);
+         this->GetCoreCallback()->LogMessage(this, " insert image", false);
          int ret = GetCoreCallback()->InsertImage(this, imageData, w, h, b, &md, true);
          if (!m_stopOnOverflow && ret == DEVICE_BUFFER_OVERFLOW)
          {
-             this->GetCoreCallback()->LogMessage(this, "[SPIN] overflow",false);
+             this->GetCoreCallback()->LogMessage(this, " overflow",false);
             // do not stop on overflow - just reset the buffer
             GetCoreCallback()->ClearImageBuffer(this);
             // don't process this same image again...
@@ -1669,13 +1644,13 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
          }
          else
          {
-             this->GetCoreCallback()->LogMessage(this, "[SPIN] release data on cam", false);
+             this->GetCoreCallback()->LogMessage(this, " release data on cam", false);
             if (ip != NULL)
                ip->Release();
 
             return ret;
          }
-         this->GetCoreCallback()->LogMessage(this, "[SPIN] leaving fnct [mv img 2 circ buf]",false);
+         this->GetCoreCallback()->LogMessage(this, " leaving fnct [mv img 2 circ buf]",false);
       }
       else
       {
@@ -1692,6 +1667,54 @@ int SpinnakerCamera::MoveImageToCircularBuffer()
 
    return DEVICE_OK;
 }
+
+
+int SpinnakerCamera::PrintDeviceInfo(SPKR::CameraPtr pCam)
+{
+    using namespace std;
+    int result = 0;
+    stringstream msg;
+
+    msg << endl << "*** DEVICE INFORMATION ***" << endl << endl;
+    
+
+    try
+    {
+        GENAPI::INodeMap& nodeMap = pCam->GetTLDeviceNodeMap();
+
+        GENAPI::FeatureList_t features;
+        GENAPI::CCategoryPtr category = nodeMap.GetNode("DeviceInformation");
+        if (GENAPI::IsAvailable(category) && GENAPI::IsReadable(category))
+        {
+            category->GetFeatures(features);
+
+            GENAPI::FeatureList_t::const_iterator it;
+            for (it = features.begin(); it != features.end(); ++it)
+            {
+                GENAPI::CNodePtr pfeatureNode = *it;
+                msg << pfeatureNode->GetName() << " : ";
+                GENAPI::CValuePtr pValue = (GENAPI::CValuePtr)pfeatureNode;
+                msg << (GENAPI::IsReadable(pValue) ? pValue->ToString() : "Node not readable");
+                msg << endl;
+            }
+        }
+        else
+        {
+            msg << "Device control information not available." << endl;
+        }
+    }
+    catch (Spinnaker::Exception& e)
+    {
+        msg << "Error: " << e.what() << endl;
+        result = -1;
+    }
+    
+    LogMessage(msg.str().c_str());
+
+    return result;
+}
+
+
 
 SpinnakerAcquisitionThread::SpinnakerAcquisitionThread(SpinnakerCamera * pCam)
    : m_numImages(-1),

@@ -4,6 +4,7 @@
 #include "../SerialManager/SerialManager.h"
 #include <sstream>
 #include "math.h"
+#include <boost/thread/thread.hpp>
 
 #define ERR_NO_PORT_SET 108
 
@@ -47,6 +48,7 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 OpenStageHub::OpenStageHub():
 	initialized_(false),
 	port_("Undefined"),
+	delay_ms_(10),
 	x_(0),y_(0),z_(0), // current position
 	x0_(0),y0_(0),z0_(0), //origin
 	xmin_(-10000),xmax_(10000),
@@ -68,6 +70,8 @@ OpenStageHub::OpenStageHub():
 	CPropertyAction* pAct = new CPropertyAction (this, &OpenStageHub::OnPort);
 	CreateProperty(MM::g_Keyword_Port, "Undefined", MM::String, false, pAct, true);
 
+	CPropertyAction* pAct2 = new CPropertyAction(this, &OpenStageHub::OnPort);
+	CreateProperty(MM::g_Keyword_Delay, "50", MM::Integer, false, pAct2, true);
 }
 
 OpenStageHub::~OpenStageHub()
@@ -271,6 +275,7 @@ int OpenStageHub::set(const std::string &keyword, const long x, const long y, co
 	if (ret != DEVICE_OK){
 		return traceback(__FUNCTION__, "failed setting new values", ret);
 	}
+	boost::this_thread::sleep(delay_ms_);
 	std::string answer;
 	ret = rx(answer,"$");
 	logMessage("OpenStage::receiving answer");
@@ -391,6 +396,13 @@ int OpenStageHub::beep() {
 	return DEVICE_OK;
 }
 
+int OpenStageHub::setDelay(const int delay_ms) {
+	this->delay_ms_ = boost::posix_time::milliseconds(delay_ms);
+	logMessage("Set delay to "+ std::to_string(delay_ms));
+	return DEVICE_OK;
+}
+
+
 std::string OpenStageHub::info() {
 	std::string answer("No information..");
 	//query("l", answer);
@@ -427,7 +439,7 @@ int OpenStageHub::getStepSizeValue(double & s) {
 		return traceback(__FUNCTION__, "could not read step size", ret); 
 	}
 
-	int k = sscanf(answer.c_str(),"%f", &s);
+	int k = sscanf(answer.c_str(),"%lf", &s);
 	if (k!=1) 
 	{ 
 		return traceback(__FUNCTION__, "could not read step size", ret); 
@@ -564,6 +576,27 @@ int OpenStageHub::OnStepSize(MM::PropertyBase* pProp, MM::ActionType eAct)
 		setStepSizeIdx((int)floor(val));
 	}
 	return ret;	
+}
+
+int OpenStageHub::OnDelay(MM::PropertyBase* pProp, MM::ActionType eAct)
+{
+	OpenStageHub* hub = static_cast<OpenStageHub*>(GetParentHub());
+	if (!hub || !hub->IsPortAvailable())
+	{
+		return traceback(__FUNCTION__, "no port available", ERR_NO_PORT_SET);
+	}
+	int ret = DEVICE_OK;
+	if (eAct == MM::BeforeGet)
+	{
+		pProp->Set(0.0);
+	}
+	else if (eAct == MM::AfterSet)
+	{
+		double val;
+		pProp->Get(val);
+		hub->setDelay((int) val);
+	}
+	return ret;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -989,8 +1022,6 @@ OpenStageZ::OpenStageZ()
 	InitializeDefaultErrorMessages();
 	CreateProperty(MM::g_Keyword_Name, g_OpenStageZ, MM::String, true);
 	CreateProperty(MM::g_Keyword_Description, g_OpenStageZDescription, MM::String, true);
-	//CPropertyAction* pAct = new CPropertyAction (this, &OpenStageZ::OnPort);
-	//CreateProperty(MM::g_Keyword_Port, "Undefined", MM::String, false, pAct, true);
 }
 
 OpenStageZ::~OpenStageZ() 
@@ -1281,3 +1312,4 @@ int OpenStageZ::OnSetRelativeZUm(MM::PropertyBase* pProp, MM::ActionType eAct)
 	}
 	return ret;	
 }
+

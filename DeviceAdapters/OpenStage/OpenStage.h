@@ -33,7 +33,7 @@
 #include "MMDeviceConstants.h"
 #include "MMDevice.h"
 #include <string>
-
+#include <boost/thread/thread.hpp>
 /**
 	Open Stage Hub class
 	https://storage.googleapis.com/plos-corpus-prod/10.1371/journal.pone.0088977/1/pone.0088977.pdf?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=wombat-sa%40plos-prod.iam.gserviceaccount.com%2F20210211%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20210211T112358Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=7d355ffcc21b12e0919b36f46bc3291465c83a930142c239335073753b1a4a95c42e1084c5e82572e1317a896a5430edfacffb8cf2cddaf4823fa13924c91247d7f9757e80b0f1e990bc061a2eb98462e38fa5504a4f00f88f296ea65d095fc48eb09f5b7def9aae924375a7d5889bd69d97abf12af6dd8c2b8a03d9ccdf5a9702332915dc57a335cf6e707f65376c0e2f776b9ce87e4e7434fad2e6ea66c0efeb513d7505793c565f0fa683bad5929450927cd64d13a7f5bc003590ab34594138b08a17431529c23325765d3d56c338011cc384d008804785dab3489d2f3ac6101664c3c6ef55bca4389ff3cd8109012c85213052310c71ed1f57cc87b67fba
@@ -76,7 +76,9 @@ public:
 	int setZPositionUm(double &z);
 	int zero();
 	int beep();
+	int setDelay(const int delay_ms);
 	std::string info();
+
 
 	int setStepSizeIdx(int options); 
 	int getStepSizeValue(double & s);
@@ -97,6 +99,8 @@ public:
 	int OnPort      (MM::PropertyBase* pProp, MM::ActionType eAct);
 	int OnCommand   (MM::PropertyBase* pProp, MM::ActionType eAct);
 	int OnStepSize  (MM::PropertyBase* pProp, MM::ActionType eAct);
+	int OnDelay     (MM::PropertyBase* pProp, MM::ActionType eAct);
+
 public:
 	// device and core information
 	MM::Device *device_;
@@ -106,6 +110,7 @@ public:
 	bool initialized_;
 	std::string port_;
 	std::string command_;
+	boost::posix_time::milliseconds delay_ms_;
 
 	// position
 	double x_,y_,z_; // current position
