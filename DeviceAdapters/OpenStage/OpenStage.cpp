@@ -580,11 +580,6 @@ int OpenStageHub::OnStepSize(MM::PropertyBase* pProp, MM::ActionType eAct)
 
 int OpenStageHub::OnDelay(MM::PropertyBase* pProp, MM::ActionType eAct)
 {
-	OpenStageHub* hub = static_cast<OpenStageHub*>(GetParentHub());
-	if (!hub || !hub->IsPortAvailable())
-	{
-		return traceback(__FUNCTION__, "no port available", ERR_NO_PORT_SET);
-	}
 	int ret = DEVICE_OK;
 	if (eAct == MM::BeforeGet)
 	{
@@ -594,8 +589,8 @@ int OpenStageHub::OnDelay(MM::PropertyBase* pProp, MM::ActionType eAct)
 	{
 		double val;
 		pProp->Get(val);
-		hub->setDelay((long) val);
-		logMessage("set delay " + std::to_string(val) + "\n");
+		this->setDelay((long) floor(val));
+		logMessage("set delay to " + std::to_string(val) + "ms\n");
 	}
 	return ret;
 }
