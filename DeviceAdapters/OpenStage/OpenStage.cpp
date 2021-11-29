@@ -70,8 +70,8 @@ OpenStageHub::OpenStageHub():
 	CPropertyAction* pAct = new CPropertyAction (this, &OpenStageHub::OnPort);
 	CreateProperty(MM::g_Keyword_Port, "Undefined", MM::String, false, pAct, true);
 
-	CPropertyAction* pAct2 = new CPropertyAction(this, &OpenStageHub::OnPort);
-	CreateProperty(MM::g_Keyword_Delay, "50", MM::Integer, false, pAct2, true);
+	CPropertyAction* pAct2 = new CPropertyAction(this, &OpenStageHub::OnDelay);
+	CreateProperty("Delay", "40", MM::Integer, false, pAct2, true);
 }
 
 OpenStageHub::~OpenStageHub()
@@ -396,7 +396,7 @@ int OpenStageHub::beep() {
 	return DEVICE_OK;
 }
 
-int OpenStageHub::setDelay(const int delay_ms) {
+int OpenStageHub::setDelay(const long delay_ms) {
 	this->delay_ms_ = boost::posix_time::milliseconds(delay_ms);
 	logMessage("Set delay to "+ std::to_string(delay_ms));
 	return DEVICE_OK;
@@ -594,7 +594,8 @@ int OpenStageHub::OnDelay(MM::PropertyBase* pProp, MM::ActionType eAct)
 	{
 		double val;
 		pProp->Get(val);
-		hub->setDelay((int) val);
+		hub->setDelay((long) val);
+		logMessage("set delay " + std::to_string(val) + "\n");
 	}
 	return ret;
 }

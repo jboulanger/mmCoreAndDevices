@@ -74,7 +74,7 @@ public:
 	int getPositionUm(double &x, double &y, double &z);
 	int zero();
 	int beep();
-	int setDelay(const int delay_ms);
+	int setDelay(const long delay_ms);
 	std::string info();
 
 
