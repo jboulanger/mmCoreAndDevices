@@ -72,8 +72,6 @@ public:
 	int updatePosition();
 	// read and return position
 	int getPositionUm(double &x, double &y, double &z);
-	int setXYPositionUm(double &x, double &y);
-	int setZPositionUm(double &z);
 	int zero();
 	int beep();
 	int setDelay(const int delay_ms);
