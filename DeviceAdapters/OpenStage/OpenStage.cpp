@@ -163,11 +163,9 @@ int OpenStageHub::DetectInstalledDevices()
    return DEVICE_OK;
 }
 
-
 int OpenStageHub::tx(const std::string &command, const std::string &terminator)
 {		
-	//logMessage("OpenStageHub::tx -> " + command);
-	int	ret = core_->SetSerialCommand(device_, port_.c_str(), command.c_str(), terminator.c_str());	//TODO:del
+	int ret = SendSerialCommand(port_.c_str(), command.c_str(), terminator.c_str());
 	if ( ret != DEVICE_OK ) 
 	{
 		return traceback(__FUNCTION__, "error while sending message", ret);
@@ -177,37 +175,34 @@ int OpenStageHub::tx(const std::string &command, const std::string &terminator)
 
 int OpenStageHub::rx(std::string &answer, const std::string &terminator)  
 {		
-	const size_t sz = 1024;
-	char buf[sz] = {'\0'};
-	int ret = core_->GetSerialAnswer(device_, port_.c_str(), sz, buf, terminator.c_str());
+	int ret = GetSerialAnswer(port_.c_str(), terminator.c_str(), answer);
+	PurgeComPort(port_.c_str());
 	if ( ret != DEVICE_OK ) 
 	{
 		return traceback(__FUNCTION__, "error while receiving message", ret);
 	}
-	answer = std::string(buf);
-	//logMessage("OpenStageHub::rx <- " + answer);
 	return DEVICE_OK;
 }
 
 void parsestr(const std::string & str, double &x, double &y, double &z) {
-	char buf[1024];
+	char buf[4096];
 	sprintf(buf,"%s",str.c_str());
 	char * pch;
-  pch = strtok (buf,",");
-  x = atof(pch);
-  printf("x=%f\n",x);
+	pch = strtok (buf,",");
+	x = atof(pch);
+	printf("x=%f\n",x);
   
-  pch = strtok (NULL,",");
-  y = atof(pch);
-  printf("y=%f\n",y);
+	pch = strtok (NULL,",");
+	y = atof(pch);
+	printf("y=%f\n",y);
   
-  pch = strtok (NULL,",");
-  z = atof(pch);
-  printf("x=%f\n",z);
+	pch = strtok (NULL,",");
+	z = atof(pch);
+	printf("x=%f\n",z);
 }
 
 int OpenStageHub::get(const std::string & keyword, double &x, double &y, double &z) {
-	logMessage("get double x,y,z");
+	logMessage("get<double> x,y,z");
 	int ret = tx(keyword,"");
 	if ( ret != DEVICE_OK ) 
 	{
@@ -240,7 +235,7 @@ int OpenStageHub::get(const std::string & keyword, double &x, double &y, double 
 
 int OpenStageHub::get(const std::string &keyword, long &x, long &y, long &z)
 {
-	logMessage("get long x,y,z");
+	logMessage("get<long> x,y,z");
 	int ret = tx(keyword,"");
 	if ( ret != DEVICE_OK ) 
 	{
@@ -253,7 +248,8 @@ int OpenStageHub::get(const std::string &keyword, long &x, long &y, long &z)
 	{
 		return traceback(__FUNCTION__, "failed receiving answer for "+keyword, ret);
 	}
-	traceback(__FUNCTION__,answer, ret);
+	
+	traceback(__FUNCTION__, answer, ret);
 
 	ret = sscanf(answer.c_str(),"%ld,%ld,%ld", &x, &y, &z);
 	if (ret != 3) 
@@ -277,8 +273,10 @@ int OpenStageHub::set(const std::string &keyword, const long x, const long y, co
 	}
 	boost::this_thread::sleep(delay_ms_);
 	std::string answer;
-	ret = rx(answer,"$");
 	logMessage("OpenStage::receiving answer");
+
+	ret = rx(answer,"$");
+	
 	logMessage(answer);
 	if (ret != DEVICE_OK){
 		return traceback(__FUNCTION__, "failed reading answer after set", ret);
@@ -316,6 +314,7 @@ int OpenStageHub::goToAbsolutePositionUm(const double x, const double y, const d
 
 int OpenStageHub::goToRelativePositionUm(const double dx, const double dy, const double dz) 
 {
+	logMessage("Start go to relative position um : " + std::to_string(dx) + "," + std::to_string(dy) + "," + std::to_string(dz));
 	int ret = 0;
 	ret = updatePosition();
 	if ( ret != DEVICE_OK ) 
