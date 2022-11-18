@@ -66,6 +66,7 @@ public:
 	int get(const std::string & keyword, double &x, double &y, double &z);
 	int set(const std::string & keyword, const long x, const long y, const long z);
 	int get(const std::string & keyword, long &x, long &y, long &z);
+	int goToRelativePositionUmStep(const double dx, const double dy, const double dz);
 	int goToAbsolutePositionUm(const double x, const double y, const double z);
 	int goToRelativePositionUm(const double x, const double y, const double z);
 	// read position 
@@ -114,6 +115,7 @@ public:
 	double x_,y_,z_; // current position
 	double x0_,y0_,z0_; //origin
 	double xmin_,xmax_,ymin_,ymax_,zmin_,zmax_; // range
+	double delta_max_;// max displacement (prevent COM time out)
 
 	int step_x_, step_y_, step_z_;
 	double step_angle_; // in degree

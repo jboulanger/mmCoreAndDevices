@@ -48,12 +48,13 @@ MODULE_API void DeleteDevice(MM::Device* pDevice)
 OpenStageHub::OpenStageHub():
 	initialized_(false),
 	port_("Undefined"),
-	delay_ms_(10),
+	delay_ms_(100),
 	x_(0),y_(0),z_(0), // current position
 	x0_(0),y0_(0),z0_(0), //origin
 	xmin_(-10000),xmax_(10000),
 	ymin_(-10000),ymax_(10000),
 	zmin_(-10000),zmax_(10000),// range
+	delta_max_(100),
 	step_x_(0), step_y_(0), step_z_(0),
 	step_angle_(0.9),
 	gear_ratio_(500),
@@ -71,7 +72,7 @@ OpenStageHub::OpenStageHub():
 	CreateProperty(MM::g_Keyword_Port, "Undefined", MM::String, false, pAct, true);
 
 	CPropertyAction* pAct2 = new CPropertyAction(this, &OpenStageHub::OnDelay);
-	CreateProperty("Delay", "40", MM::Integer, false, pAct2, true);
+	CreateProperty("Delay", "100", MM::Integer, false, pAct2, true);
 }
 
 OpenStageHub::~OpenStageHub()
@@ -95,7 +96,7 @@ int OpenStageHub::Initialize()
 	double s;
 	getStepSizeValue(s);
 	char stepsizestr[64];
-	sprintf(stepsizestr,"%d",microstepping_idx_);
+	sprintf(stepsizestr, "%d", microstepping_idx_);
 
 	updatePosition();
 
@@ -176,6 +177,7 @@ int OpenStageHub::tx(const std::string &command, const std::string &terminator)
 int OpenStageHub::rx(std::string &answer, const std::string &terminator)  
 {		
 	int ret = GetSerialAnswer(port_.c_str(), terminator.c_str(), answer);
+	boost::this_thread::sleep(delay_ms_);
 	PurgeComPort(port_.c_str());
 	if ( ret != DEVICE_OK ) 
 	{
@@ -242,6 +244,8 @@ int OpenStageHub::get(const std::string &keyword, long &x, long &y, long &z)
 		return traceback(__FUNCTION__, "failed sending command" + keyword, ret);
 	}
 	
+	boost::this_thread::sleep(delay_ms_);
+
 	std::string answer;
 	ret = rx(answer,"$");
 	if ( ret != DEVICE_OK ) 
@@ -271,74 +275,78 @@ int OpenStageHub::set(const std::string &keyword, const long x, const long y, co
 	if (ret != DEVICE_OK){
 		return traceback(__FUNCTION__, "failed setting new values", ret);
 	}
+	
 	boost::this_thread::sleep(delay_ms_);
+	
 	std::string answer;
 	logMessage("OpenStage::receiving answer");
-
 	ret = rx(answer,"$");
-	
 	logMessage(answer);
+
 	if (ret != DEVICE_OK){
 		return traceback(__FUNCTION__, "failed reading answer after set", ret);
 	}
+
 	return DEVICE_OK;
 }
 
 int OpenStageHub::goToAbsolutePositionUm(const double x, const double y, const double z) 
 {
+	return goToRelativePositionUm(x - x_, y - y_, z - z_);
+}
+
+int OpenStageHub::goToRelativePositionUmStep(const double dx, const double dy, const double dz) 
+{
+	logMessage("Start go to relative position step um : " + std::to_string(dx) + "," + std::to_string(dy) + "," + std::to_string(dz));
+
 	int ret = 0;
 	ret = updatePosition();
-	if ( ret != DEVICE_OK ) 
+	if (ret != DEVICE_OK)
 	{
-		return traceback(__FUNCTION__,"could not get position", ret);
+		return traceback(__FUNCTION__, "could not get position", ret);
 	}
-	
-	if (!isPositionValid(x,y,z)) 
+
+	if (!isPositionValid(x_ + dx, y_ + dy, z_ + dy))
 	{
-		return traceback(__FUNCTION__,"invalid position", DEVICE_ERR);
+		return traceback(__FUNCTION__, "invalid position ", DEVICE_ERR);
 	}
-	ret = set("ga", (long)floor(1000.0*x), (long)floor(1000.0*y), (long)floor(1000.0*z));
-	if( ret != DEVICE_OK )
+
+	//ret = set("gr", (long)floor(1000. * dx), (long)floor(1000.0 * dy), (long)floor(1000.0 * dz));
+	ret = set("ga", (long)floor(1000. * (x_+dx)), (long)floor(1000.0 * (y_+dy)), (long)floor(1000.0 * (z_+dz)));
+	if (ret != DEVICE_OK)
 	{
-		return traceback(__FUNCTION__,"could not go to absolute position", ret);
+		return traceback(__FUNCTION__, "could not go to relative position", ret);
 	}
 
 	ret = updatePosition();
-	if ( ret != DEVICE_OK ) 
+	if (ret != DEVICE_OK)
 	{
-		return traceback(__FUNCTION__,"could not get position", ret);
+		return traceback(__FUNCTION__, "could not get position", ret);
 	}
 
 	return DEVICE_OK;
+
 }
 
 int OpenStageHub::goToRelativePositionUm(const double dx, const double dy, const double dz) 
 {
-	logMessage("Start go to relative position um : " + std::to_string(dx) + "," + std::to_string(dy) + "," + std::to_string(dz));
-	int ret = 0;
-	ret = updatePosition();
-	if ( ret != DEVICE_OK ) 
+	logMessage("Start move by: " + std::to_string(dx) + "," + std::to_string(dy) + "," + std::to_string(dz) + " microns");
+	double x1 = x_ + dx, y1 = y_ + dy, z1 = z_ + dz;
+	double distance = sqrt(dx * dx + dy * dy + dz * dz);
+	int K = (int) ceil(distance / delta_max_);
+	double vx =  dx / K, vy = dy / K, vz = dz / K;
+	logMessage("Number of steps :" + std::to_string(K) + "@"+ std::to_string(vx) + "," + std::to_string(vy) + "," + std::to_string(vz) + " microns");
+	for (int k = 1; k <= K; k++) 
 	{
-		return traceback(__FUNCTION__,"could not get position", ret);
+		logMessage("Step :" + std::to_string(k) + "/" + std::to_string(K));
+		goToRelativePositionUmStep(vx,vy,vz);
 	}
-	
-	if (!isPositionValid(x_+dx,y_+dy,z_+dy)) 
-	{
-		return traceback(__FUNCTION__,"invalid position ", DEVICE_ERR);
+	// if the position is not the desired one, try again
+	double kx = x1 - x_, ky = y1 - y_, kz = z1 - z_;
+	if (sqrt(dx * dx + dy * dy + dz * dz) > 1) {
+		logMessage("Extra step");
+		goToRelativePositionUmStep(kx, ky, kz);
 	}
-
-	ret = set("gr", (long)floor(1000.*dx), (long)floor(1000.0*dy), (long)floor(1000.0*dz));
-	if ( ret != DEVICE_OK) 
-	{
-		return traceback(__FUNCTION__,"could not go to relative position", ret);
-	}
-	
-	ret = updatePosition();
-	if ( ret != DEVICE_OK ) 
-	{
-		return traceback(__FUNCTION__,"could not get position", ret);
-	}
-	
 	return DEVICE_OK;
 }
 
